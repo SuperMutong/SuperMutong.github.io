@@ -2,7 +2,7 @@
 title: 牧童
 SEOTitle: 牧童的博客 | BY Blog
 header-img: img/post-bg-desk.jpg
-email: litianpeng0624@gmail.com
+email: litianpeng0624@163.com
 description: "记录学习"
 keyword: "Haitang, iOS, Apple, iPhone"
 url: "http://SuperMutong.github.io"          # your host, for absolute URL
@@ -58,11 +58,11 @@ kramdown:
 
 # Analytics settings
 # Baidu Analytics
-ba_track_id: b50bf2b12b5338a1845e33832976fd68
+ba_track_id: 
 
 # Google Analytics
-ga_track_id: 'UA-90855596-1'            # Format: UA-xxxxxx-xx
-ga_domain: auto
+ga_track_id:             # Format: UA-xxxxxx-xx
+ga_domain: 
 
 
 
@@ -79,20 +79,3 @@ chrome-tab-theme-color: "#000000"
 service-worker: true
 
 
-
-# Friends
-friends: [
-    {
-        title: "WY",
-        href: "http://zhengwuyang.com"
-    },{
-        title: "简书·BY",
-        href: "http://www.jianshu.com/u/e71990ada2fd"
-    },{
-        title: "Apple",
-        href: "https://apple.com"
-    },{
-        title: "Apple Developer",
-        href: "https://developer.apple.com/"
-    }
-]
