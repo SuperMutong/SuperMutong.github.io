@@ -248,7 +248,7 @@ struct method_t {
 &emsp;&emsp;方法类型 types 是个 char 指针, 其实存储着方法的参数类型和返回值类型.
 
 &emsp;&emsp;imp 指向了方法的实现, 本质上是一个函数指针
-#### - Ivar 
+#### Ivar 
 &emsp;&emsp;`Ivar `代表类中实例变量的类型
 
 &emsp;&emsp;类型是`ivar_t `
@@ -308,7 +308,7 @@ unsigned int outCount = 0;
 &emsp;&emsp;其实编译器会根据情况在 `objc_msgSend`, `objc_msgSend_stret `,`objc_msgSendSuper` 或 `objc_msgSendSuper_strct` 四个方法中选择一个来调用, 如果消息时传递给超类, 那么会调用名字带有 `super`的函数, 如果消息返回值是数据结构而不是简单值是, 那么会调用名字带有`stret`的函数,带 `super` 的消失传递给超类;
 
 &emsp;&emsp;`stret` 可分为`st` + `ret`两部分, 分别代表 `struct` 和 `return`; `fpret` 就是`fp` + `ret`, 分别代表 `floating-point` 和 `return`
-#### - 方法中的隐藏参数
+#### 方法中的隐藏参数
 &emsp;&emsp;我们经常在方法中使用 self 关键字来引用实例本身, 但从没有想过为什么 self 能取到调用当前方法的对象吧, 其实 self 的内容是在方法运行时被偷偷动态传入的
 
 &emsp;&emsp;当 objc_msgSend 找到方法对应的实现是, 他被直接调用该方法实现, 并将消息中所有的参数传递给方法实现, 同时, 他还传递两个隐藏的参数
