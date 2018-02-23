@@ -54,23 +54,26 @@ id objc_msgSend(id self, SEL op, ...)
 参数解读
 
 #### id 他是一个指向类实例的指针
+
 ```objc
-typedef struct objc_object *id
+typedef struct objc_object *id;
 struct objc_object {
-		private:
-			isa_t isa;
-		public:
-			// ISA() assumes this is NOT a tagged pointer object
-			Class ISA();
-			// getIsa() allows this to be a tagged pointer object
-			Class getIsa();
-			 ... 此处省略其他方法声明
+    private:
+        isa_t isa;
+    public:
+        // ISA() assumes this is NOT a tagged pointer object
+        Class ISA();
+        // getIsa() allows this to be a tagged pointer object
+        Class getIsa();
+         ... 此处省略其他方法声明
 }
 ```
+
 &emsp;&emsp;`objc_object` 结构体包含一个 `isa` 指针, 类型为`isa_t` 联合体, 根据 isa 就可以找到对象所属的类, 但是 `isa` 指针不总是指向实例类对象所属的类, 不能依靠他来确定类型, 而是应该用 class 方法来确认实例对象的类, 因为 `KVO` 的实现机理([面试总结第七条](https://supermutong.github.io/2017/12/27/RunTime-%E9%9D%A2%E8%AF%95%E6%80%BB%E7%BB%93/))就是讲被观察对象的 `isa` 指针指向一个中间类而不是真是的类, 这是一种叫做 `isa-swizzling` 的技术
 #### SEL 
 &emsp;&emsp;他是 `selector` 在 Objc 中的表达类型(在 Swift 中是`Selector` 类). `selector` 是方法选择器, 可以理解为区分方法的 ID, 而这个 ID 的数据结构是 `SEL`.  
-```objc
+
+```
 typedef struct objc_selector *SEL
 ```
 &emsp;&emsp;不同类中相同名字的方法对应的方法选择器是相同的, 即使方法名字相同而变量类型不同也会导致他们具有相同的方法选择器, 因为 selector 只记了 method 的 name, 没有参数
@@ -78,19 +81,21 @@ typedef struct objc_selector *SEL
 &emsp;&emsp;代表参数, 是变参, 也就是方法携带的参数, 可以没有, 可以有多个
 #### Class  
 一个指向` objc_class `结构体的指针
+
 ```objc
 struct objc_class:objc_object{
-	Class isa  isa指向其所属的元类
-    Class super_class  超类
-	const char *name  类名
-	long version   类的版本信息
-	long info   类的详情
-	struct objc_ivar_list *ivars  类的成员变量列表
-	struct objc_method_list **methodLists 实例方法列表 即 -func
-	struct objc_cache *cache  被调用的方法存到 cache 中, 方便下次查找
-	struct objc_protocol_list *protocols  该类的协议列表
-	class_data_bits_t bits 
+	Class isa;  //isa指向其所属的元类
+    Class super_class;  //超类
+	const char *name; //类名
+	long version;   //类的版本信息
+	long info;  //类的详情
+	struct objc_ivar_list *ivars;  //类的成员变量列表
+	struct objc_method_list **methodLists; //实例方法列表 即 -func
+	struct objc_cache *cache;  //被调用的方法存到 cache 中, 方便下次查找
+	struct objc_protocol_list *protocols;  //该类的协议列表
+	class_data_bits_t bits; 
 	}
+
 ```
 
 &emsp;&emsp;这里解释下元类, 先从类对象开始
@@ -183,7 +188,7 @@ struct class_data_bits_t{
 3. ` entsize_list_tt` 指针数组
 
 &emsp;&emsp;`class_rw_t` 的内容是可以在运行时被动态修改的, 可以说运行时对类的拓展大都存储在这里
-```
+```objc
 struct class_rw_t{
 	uint32_t flags;
 	uint32_t version;
@@ -204,7 +209,7 @@ struct class_rw_t{
 &emsp;&emsp;Category 为现有的类提供拓展性, 它是 category_t 结构体的指针
 
 &emsp;&emsp;category_t 存储了类别中可以拓展的实例方法. 类方法 . 协议. 实例属性.和类属性
-```
+```objc
 struct category_t {
     const char *name;
     classref_t cls;
@@ -236,7 +241,7 @@ struct category_t {
 &emsp;&emsp;`Method` 是代表类中的某个方法的类型
 `Method` 的类型是 `method_t`
 ```objc
-typedef struct method_t *Method
+typedef struct method_t *Method;
 struct method_t {
     SEL name; 
 	const char *types;
@@ -271,17 +276,17 @@ struct ivar_t {
 ```
 - (void)getAllVars
 unsigned int outCount = 0;
-    Ivar *vars = class_copyIvarList([self class], &outCount);
-    for (int i = 0; i < outCount; i ++) {
-        Ivar var = vars[i];
-        const char *name = ivar_getName(var);
-        NSString *key = [NSString stringWithUTF8String:name];
-        
-        // 注意kvc的特性是，如果能找到key这个属性的setter方法，则调用setter方法
-        // 如果找不到setter方法，则查找成员变量key或者成员变量_key，并且为其赋值
-        // 所以这里不需要再另外处理成员变量名称的“_”前缀
-        id value = [self valueForKey:key]; 
-           }
+Ivar *vars = class_copyIvarList([self class], &outCount);
+for (int i = 0; i < outCount; i ++) {
+    Ivar var = vars[i];
+    const char *name = ivar_getName(var);
+    NSString *key = [NSString stringWithUTF8String:name];
+    
+    // 注意kvc的特性是，如果能找到key这个属性的setter方法，则调用setter方法
+    // 如果找不到setter方法，则查找成员变量key或者成员变量_key，并且为其赋值
+    // 所以这里不需要再另外处理成员变量名称的“_”前缀
+    id value = [self valueForKey:key]; 
+}
 ```
 #### objc_property_t 
 &emsp;&emsp;`@property` 标记了类中的属性, 他是一个指向 `objc_property `结构体的指针
@@ -325,7 +330,7 @@ unsigned int outCount = 0;
 ###  消息转发  
 ####  重定向
 &emsp;&emsp;在消息转发机制执行前, Runtime 系统会在给我们一次偷梁换柱的机会, 即通过重载 - (id)forwardingTargetForSelector:(SEL)aSelector 方法替换消息的接受者为其他对象
-```
+```objc
 -(id)forwardingTargetForSelector:(SEL)aSelector{
 	if (aSelector == @selector(mysteriousMthod:)){
 		return alternateObject;
@@ -341,7 +346,7 @@ unsigned int outCount = 0;
 				
 ####  转发 
 &emsp;&emsp;当动态方法解析不作处理返回 NO 时, 消息转发机制会被触发, 在这时 `forwardInvocation: `方法会被执行, 我们可以重写这个方法来定义我们的转发逻辑
-```
+```objc
 - (void)forwardInvocation:(NSInvocation *)anInvocation
 {
     if ([someOtherObject respondsToSelector:
@@ -382,8 +387,8 @@ unsigned int outCount = 0;
 ### Method Swizzling
 &emsp;&emsp;当我们无法触碰到某各类的源代码, 但是又想更改这个类的某个方法的实现时, 就要用到 `Method Swizzling` 了, 下面举一例子, 这个例子是为了防止系统找不到调用方法 crash 的问题, 比如你添加一个 `UIButton`, 给` btn `添加 `selector`, 但是没有实现对应的 `selector`, 这个时候你点击 `btn`, 就会 crash. 为了防止类似的 crash ,我们用 `Method Swizzling` 重写 `forwardingTargetForSelector` 消息重定向, 下面开始贴代码
 	
-    首先, 我们先实现一个转发对象 `FakeForwardTargetObjct `
-		
+首先, 我们先实现一个转发对象 `FakeForwardTargetObjct` 
+
 ```objc
 fakeIMP(id sender, SEL sel,...){
 		    return nil;	
@@ -391,19 +396,20 @@ fakeIMP(id sender, SEL sel,...){
 @implementation FakeForwardTargetObjct
 	-(instancetype)initWithSelector:(SEL)aSelector{
 		self = [super init];
-			if (self) {
-				if (class_addMethod([self class], aSelector, (IMP)fakeIMP, NULL)) 
-					{
-					     NSLog(@"add Fake Selector:[instance %@]",NSStringFromSelector(aSelector));
-						}
+		if (self) {
+			if (class_addMethod([self class], aSelector, (IMP)fakeIMP, NULL)) 
+			 {
+			     NSLog(@"add Fake Selector:[instance %@]",NSStringFromSelector(aSelector));
+			}
 	}
     return self;
+    }
 @end
 ```	
-	
+
 接着实现转发逻辑
 	
-```
+```objc
 -implementation NSObject (safeSwizzle)
 + (void)load{
     static dispatch_once_t onceToken;
@@ -443,17 +449,11 @@ end
 &emsp;&emsp;自己写一遍只是为了加深下印象, 写的确实没有原博主们写得好
 
 ### 参考博客
-[http://yulingtianxia.com/blog/2014/11/05/objective-c-runtime/](http://yulingtianxia.com/blog/2014/11/05/objective-c-runtime/)
-
-[http://www.jianshu.com/p/efeb33712445#](http://www.jianshu.com/p/efeb33712445#)
-
-[http://www.jianshu.com/p/d63028fc978f](http://www.jianshu.com/p/d63028fc978f)
-
-[http://blog.csdn.net/njafei/article/details/71172428](http://blog.csdn.net/njafei/article/details/71172428)
-
-[https://njafei.github.io/2017/05/03/Method-SEL-IMP/](https://njafei.github.io/2017/05/03/Method-SEL-IMP/)
-
-[http://www.code4app.com/blog-822715-1562.html](http://www.code4app.com/blog-822715-1562.html)
-
-[https://www.jianshu.com/p/ab966e8a82e2](https://www.jianshu.com/p/ab966e8a82e2)
+* [http://yulingtianxia.com/blog/2014/11/05/objective-c-runtime/](http://yulingtianxia.com/blog/2014/11/05/objective-c-runtime/)
+*  [http://www.jianshu.com/p/efeb33712445#](http://www.jianshu.com/p/efeb33712445#)
+* [http://www.jianshu.com/p/d63028fc978f](http://www.jianshu.com/p/d63028fc978f)
+* [http://blog.csdn.net/njafei/article/details/71172428](http://blog.csdn.net/njafei/article/details/71172428)
+* [https://njafei.github.io/2017/05/03/Method-SEL-IMP/](https://njafei.github.io/2017/05/03/Method-SEL-IMP/)
+* [http://www.code4app.com/blog-822715-1562.html](http://www.code4app.com/blog-822715-1562.html)
+* [https://www.jianshu.com/p/ab966e8a82e2](https://www.jianshu.com/p/ab966e8a82e2)
 

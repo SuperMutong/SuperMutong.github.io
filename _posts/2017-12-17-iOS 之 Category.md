@@ -20,15 +20,17 @@ tags:
 `Category` 是 Object-C 2.0 以后添加的语言特性, Category的主要作用是为已经存在的类添加方法, 除此之外, 还有另外使用场景
 
 1. 可以把类的实现分开在几个不同的文件里面. 这样做有几个显而易见的好处
+
 		1. 可以减少单个文件的体积
-		2. 可以把不同的功能组织到不同的 `Category` 里
-		3. 可以由多个开发者共同完成一个类
-		4. 可以按需加载想要的 `Category`
+		1. 可以把不同的功能组织到不同的 `Category` 里
+		1. 可以由多个开发者共同完成一个类
+		1. 可以按需加载想要的 `Category`
+
 1. 声明私有方法
 1. 模拟多继承
 1. 把 framework 的私有方法公开
 
-#### 	 2. `Category` 和 `extension` 的区别
+#### 2. `Category` 和 `extension` 的区别
 1. `extension`看起来很像一个匿名的`Category`
 但是`extension`和 有名字的 `Category` 几乎完全是两个东西, `extension`在编译期决议, 他是类的一部分, 在编译器和头文件里的`@interface `以及实现文件里`@implement` 一起形成一个完整的类, 它伴随类的产生而产生, 亦随之一起消亡. `extension` 一般用来隐藏类的私有信息, 你必须有一个类的源码才能为一个类添加 `extension`, 所以你无法为系统的类添加 `extension`
 2. `Category` 是在运行期决议的
@@ -47,7 +49,7 @@ typedef struct category_t{
 更具体来说 `attachCategories` 做的就是将 `locstamped_category_list_t.list` 列表中每个 `locstamped_category_t.cat` 中的方法, 协议和属性分别添加到类的 `class_rw_t` 对应列表中
  但是 Extension 可以添加实例变量
 		
-####3. `category` 如何加载
+#### 3. `category` 如何加载
 
 1. 把 `Category` 的实例方法, 协议, 以及属性添加到类上
 1. 把 `Category` 的类方法和协议添加到类的 metaclass 上
@@ -56,35 +58,39 @@ typedef struct category_t{
 	2. `Category` 的方法被放到了新方法列表的前面, 而原来类的方法被放到了新方法列表的后面, 这也就是我们平常所说的 `category` 的方法会 "覆盖"掉原来类的同名方法, 这是因为运行时在查找方法的时候是顺着方法列表的顺序查找的, 一直到对应名字的方法, 就会停止
 
 
-#### 		4. 方法冲突
+#### 4. 方法冲突
 
 1. 在类和 `Category` 中都可以有 `+load` 方法, 调用顺序是咋样的
+
 	答: 先类后 `Category`, 而 `Category` 的 `+load` 执行顺序是根据编译顺序决定的, 谁先编译, 先执行谁, 可以在 XCode Compile Sources 中修改
 1. 如果多个 `Category` 和 类 有多个相同的方法, 调用顺序是咋样的
+
 	答: 会找到最后一个编译的 `Category` 里对应的方法
 1. 在 类的 +load 方法调用的时候, 我们能否调用 `Category` 中声明的方法吗?
+
 	答: 可以的, 因为附加 `Category` 到类的工作会先于 `+ load` 方法的执行
 1. `Category` 的方法和 类的方法冲突了, 我想调用类的方法咋办
+
 	答: 在运行时的时候获取类和 `Category` 结合的方法列表, 然后遍历, 获取最后一个方法
 
 #### 		5. 关联对象
 1. `Category` 无法添加实例变量, 但是我们可以添加和对象关联的值, 使用 runtime
 		  
-```
-    ClassA.m
-		-(void)setName:(NSString *)name{
-			  objc_setAssocicatedObject(self,"name",name,OBJC_ASSOCIATION_COPY);
-	}
-	-(NSString *)name{
-		  NSString *nameObjct =objc_getAssociatedObject(self, "name")
-		  return name nameObjct;
+```objc
+ClassA.m
+-(void)setName:(NSString *)name{
+	objc_setAssocicatedObject(self,"name",name,OBJC_ASSOCIATION_COPY);
+}
+-(NSString *)name{
+	NSString *nameObjct =objc_getAssociatedObject(self, "name");
+	return name nameObjct;
+}
 ```
 2. 对象销毁的时候如何处理关联对象
+	所有的关联对象都是由 `AssociationsManager` 管理, 里面有一个静态 `AssociationsHashMap` 来存储所有的关联对象的, `runtime` 的销毁对象 `objc_destructInstance` 里面会判断这个对象有没有关联对象, 如果有, 会调用 `_object_remove_assocations` 做关联对象的清理方法
 
-1. 所有的关联对象都是由 `AssociationsManager` 管理, 里面有一个静态 `AssociationsHashMap` 来存储所有的关联对象的, `runtime` 的销毁对象 `objc_destructInstance` 里面会判断这个对象有没有关联对象, 如果有, 会调用 `_object_remove_assocations` 做关联对象的清理方法
 
-
-####6. `Category` 添加属性
+#### 6. `Category` 添加属性
 1. `Category` 可以添加属性但是不能添加实例变量 (实例变量是成员变量的一种特殊情况)
 	1. 其实这句话可以这么理解, 添加属性就是添加`set` `get` 方法, `Category` 可以添加方法, 但是不能添加 实例变量 也就是 _XXX
 	2. 我们经常在 iOS 代码中看到在类别中添加属性, 在这种情况下, 是不会自动生成实例变量的
@@ -93,29 +99,30 @@ typedef struct category_t{
 1. 为什么不能添加实例变量
 	1. 要从 Class 的结构说起, 下面是 Class 的结构体
 				
-```
-	    struct objc_class{
-			  Class isa  指向对象类型
-			  Class super_class 指向父类
-			  const char *name 类名
-			  long version 类的版本信息
-			  long info 供运行期使用的一些位标识
-			  long instance_size 类的实例大小
-			  struct objc_ivar_list *ivars 成员变量的数组
-			  struct objc_method_list methodList 方法定义的数组, 注意这里是 **
-			  objc_cache 最近使用的方法, 用于方法调用的优化
-			  struct objc_protocol_list *protocols协议的数组
-	}
+```objc
+struct objc_class{
+	  Class isa;  指向对象类型
+	  Class super_class; 指向父类
+	  const char *name; 类名
+	  long version; 类的版本信息
+	  long info; 供运行期使用的一些位标识
+	  long instance_size; 类的实例大小
+	  struct objc_ivar_list *ivars; 成员变量的数组
+	  struct objc_method_list **methodList; 方法定义的数组, 注意这里是 **
+	  objc_cache; 最近使用的方法, 用于方法调用的优化
+	  struct objc_protocol_list *protocols; 协议的数组
+}
 
 `methodList`: 这是方法的定义列表, 是指针的指针, 所以可以通过修改过该指针指向的指针的地址, 来动态增加方法, 这也就是 `Category` 的实现原理
-简单说 `Category` 设计的目的就是用来扩展类功能, 而非封装数据, 所有的属性和成员变量应该放在主接口 `(main interface)`, 才能使类的设计更加清晰
+简单说 `Category` 设计的目的就是用来扩展类功能, 而非封装数据,所有的属性和成员变量应该放在主接口 `(main interface)`, 才能使类的设计更加清晰
 `ivars`: 存储对象成员变量的指针, 所以无法动态增加成员变量
+
 ```
 
 来个例子讲解下如果在 `Category` 中添加属性
 	先了解下一会要用到的一个方法
 
-```
+```objc
 OBJC_EXPORT void objc_setAssociatedObject(id object, const void *key, id value, objc_AssociationPolicy policy) __OSX_AVAILABLE_STARTING(__MAC_10_6, __IPHONE_3_1);
 
 object 源对象
@@ -124,7 +131,7 @@ value 被关联的值
 policy 一个枚举值, 表示关联对象的行为, 下面是全部的枚举
 ```
 
-```
+```objc
 typedef OBJC_ENUM(uintptr_t, objc_AssociationPolicy) {
     OBJC_ASSOCIATION_ASSIGN = 0,           /**< Specifies a weak reference to the associated object. */
     OBJC_ASSOCIATION_RETAIN_NONATOMIC = 1, /**< Specifies a strong reference to the associated object. 
@@ -140,18 +147,18 @@ typedef OBJC_ENUM(uintptr_t, objc_AssociationPolicy) {
 
 首先在 .h 文件中添加一个属性 
 		
-```
+```objc
 @property (nonatomic, copy) NSString *name;
 ``` 
 
 在 .m 文件中添加 set 和 get 方法, 首先声明一个静态变量
 
-```
+```objc
 static const char associatedKey
 ```
 
 实现 get 和 set 方法
-```
+```objc
 //Category中的属性，只会生成setter和getter方法，不会生成成员变量
 
 - (void)setName:(NSString *)name {
@@ -196,7 +203,7 @@ static const char associatedKey
 
 		4. 实现方法
 	
-```
+```objc
 	- (void)setBackgroundScheme:(NSString *)scheme{
 	    //去掉重复添加
 	    NSString *background = objc_getAssociatedObject(self, &backgroundScheme);
