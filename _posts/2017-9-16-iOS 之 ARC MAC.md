@@ -14,4 +14,9 @@ tags:
 ---
 
 
-##iOS 之 ARC,MRC 以及 AutoReleasePool
+## iOS 之 ARC,MRC 以及 AutoReleasePool
+
+## 前言
+    这篇文章我猜测会很长, 因为涉及到了ARC, MRC, AutoReleasePool 以及内存分配
+
+### iOS 程序中的内存分配
