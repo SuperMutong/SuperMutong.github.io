@@ -2,7 +2,7 @@
 layout:     post
 title:      iOS 之 RunTime
 subtitle:   RunTime
-date:       2017-12-27
+date:       2017-10-7
 author:     Mutong
 header-img: img/post-bg-ios9-web.jpg
 catalog: true
@@ -69,7 +69,7 @@ struct objc_object {
 }
 ```
 
-&emsp;&emsp;`objc_object` 结构体包含一个 `isa` 指针, 类型为`isa_t` 结构体, 根据 isa 就可以找到对象所属的类, 但是 `isa` 指针不总是指向实例类对象所属的类, 不能依靠他来确定类型, 而是应该用 class 方法来确认实例对象的类, 因为 `KVO` 的实现机理([面试总结第七条](https://supermutong.github.io/2017/12/27/iOS-%E4%B9%8B-%E9%9D%A2%E8%AF%95%E9%A2%98/#7-kvo-%E5%86%85%E9%83%A8%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86)就是讲被观察对象的 `isa` 指针指向一个中间类而不是真是的类, 这是一种叫做 `isa-swizzling` 的技术
+&emsp;&emsp;`objc_object` 结构体包含一个 `isa` 指针, 类型为`isa_t` 联合体, 根据 isa 就可以找到对象所属的类, 但是 `isa` 指针不总是指向实例类对象所属的类, 不能依靠他来确定类型, 而是应该用 class 方法来确认实例对象的类, 因为 `KVO` 的实现机理([面试总结第七条](https://supermutong.github.io/2017/12/27/iOS-%E4%B9%8B-%E9%9D%A2%E8%AF%95%E9%A2%98/#7-kvo-%E5%86%85%E9%83%A8%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86)就是讲被观察对象的 `isa` 指针指向一个中间类而不是真是的类, 这是一种叫做 `isa-swizzling` 的技术
 #### SEL 
 &emsp;&emsp;他是 `selector` 在 Objc 中的表达类型(在 Swift 中是`Selector` 类). `selector` 是方法选择器, 可以理解为区分方法的 ID, 而这个 ID 的数据结构是 `SEL`.  
 
