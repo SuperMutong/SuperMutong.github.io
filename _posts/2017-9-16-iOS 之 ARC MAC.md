@@ -165,13 +165,21 @@ NSLog(p)
 
 `autorelease` 实际上只是把对`release`的调用延迟了, 当对一个对象添加`autorelease`, 只是把该对象放入了当前的`autorelease pool`, 当该`pool`释放时, 该`pool`中的所有对象都会被调用`release`
 
+#### autorelease对象在什么时候释放
 
+有无显示的创建`autoreleasePool`为准分为两种
+* 显示使用`@autoreleasePool`, 会在大括号结束的时候释放
+* 没有显示的创建`@autoreleasePool`, 由系统自己创建,系统会自动释放, 释放实际在当前`runloop`准备进入休眠(`BeforeWaiting`)的时候调用`pop`和`push`来释放旧的池子并创建新的池子
 
 ### AutoReleasePool
 
-#### 功能
+#### 用途
 
 存储在自动释放池的对象, 在自动释放池销毁时, 会自动调用该对象的`release`方法, 如果引用计数为0, 会自动调用`dealloc`方法, 不需要用户自己写 `release`
+
+#### 原理
+
+自动释放池是由多个`AutoreleasePoolPage`组成的`双向链表`, 其中主要通过`push`和`pop`操作来管理
 
 #### 底层实现
 
@@ -294,6 +302,219 @@ class AutoreleasePoolPage
 初始的`next == begin()`, 新加入自动释放池的一个对象, 会存放在当前`next`指向的位置, 当对象存放完成后, `next`指针会指向下一个为空的地址
 
 当`next == end()`时, 表示当前`page`已经满了, 如果在加入一个对象需要创建`child page`
+
+#### objc_autoreleasePoolPush
+
+先上一张图(红色部分表示push后会变化的东西), 接下来在详细说下其流程
+![](https://ws2.sinaimg.cn/large/006tKfTcly1fp20or98jxj30sj0kfwet.jpg)
+
+`objc_autoreleasePoolPush`的函数定义如下:
+```c++
+void *objc_autoreleasePoolPush(void)
+{
+    return AutoreleasePoolPage::push();
+}
+```
+
+`push`的定义如下
+
+```c++
+static inline void *push() 
+{
+    id *dest;
+    if (DebugPoolAllocation) {
+        // Each autorelease pool starts on a new pool page.
+        dest = autoreleaseNewPage(POOL_BOUNDARY);
+    } else {
+        dest = autoreleaseFast(POOL_BOUNDARY);
+    }
+    assert(dest == EMPTY_POOL_PLACEHOLDER || *dest == POOL_BOUNDARY);
+    return dest;
+}
+```
+
+这里会调用`autoreleaseFase(POOL_BOUNDARY)`操作, 定义如下
+
+```c++
+static inline id *autoreleaseFast(id obj)
+{
+    //获取当前正在使用的page
+    AutoreleasePoolPage *page = hotPage();
+    if (page && !page->full()) {
+        return page->add(obj);
+    } else if (page) {
+        return autoreleaseFullPage(obj, page);
+    } else {
+        return autoreleaseNoPage(obj);
+    }
+}
+```
+
+这里有三种情况
+
+* `hotPage` 存在并且还没有满
+    - 调用`page-add(obj)`方法将对象加入该`hotPage`中
+* `hotPage`满了
+    - 调用`autoreleaseFullPage(obj,page)`方法, 该方法会先查找`hotPage`的`child`, 如果有则将`child page`设置为`hotPage`, 如果没有则将创建一个新的`hotPage`,之后在这个新的`hotPage`上执行`page->add(obj)`操作
+* hotPage 不存在
+    - 调用`autoReleaseNoPage(obj)`方法, 改方法会创建一个`hotPage`, 然后执行`page->add(obj)`操作
+
+再来看看`add`方法的定义
+
+```c++
+id *add(id obj)
+{
+    assert(!full());
+    unprotect();
+    id *ret = next;  // faster than `return next-1` because of aliasing
+    *next++ = obj;
+    protect();
+    return ret;
+}
+```
+
+`add`会把`obj`存放在原本`next`所在的位置, 然后`next`指针++移动到下一个位置
+
+接着看`autorelease`方法, 同样也是会调用'autoreleaseFast(obj)'方法
+
+```c++
+static inline id autorelease(id obj)
+{
+    assert(obj);
+    assert(!obj->isTaggedPointer());
+    id *dest __unused = autoreleaseFast(obj);
+    assert(!dest  ||  dest == EMPTY_POOL_PLACEHOLDER  ||  *dest == obj);
+    return obj;
+}
+```
+
+总结: 调用`objc_autoreleasePoolPush`方法时, 这个方法首先在当前`next`指向的位置`add`一个`POOL_BOUNDARY`, 然后当向一个对象方法`autorelease`消息,就会把该对象`add`进`page`里`POOL_BOUNDARY`后面, 之后`next`指向刚插入的位置的下一个内存地址. 当当前`page`快满的时候(即`next`即将指向栈顶`end()`位置), 说明这一页`page`快满了, 如果这个时候再加入一个对象, 会先建立下一页`page`, 双向链表建立完成后, 新的`page`的`next`指向该页的栈底`begin()`位置, 然后继续向栈顶添加新的指针, 周而复始.
+
+#### objc_autoreleasePoolPop
+
+方法定义:
+```c++
+void objc_autoreleasePoolPop(void *ctxt)
+{
+    AutoreleasePoolPage::pop(ctxt);
+}
+```
+
+静态方法`pop(ctxt)`(`ctxt`是前面`push`后返回的哨兵对象), 接着看下 `pop`方法
+```c++
+static inline void pop(void *token) 
+{
+    AutoreleasePoolPage  *page = pageForPointer(token);
+    id *stop = (id *)token;
+    
+    page->releaseUntil(stop);
+    
+    if (page->child) {
+        // hysteresis: keep one empty child if page is more than half full
+        if (page->lessThanHalfFull()) {
+            page->child->kill();
+        } else if (page->child->child) {
+            page->child->child->kill();
+        }
+    }
+}
+```
+
+其中`pageForPointer(tojen)`会获取哨兵对象所在`page`
+
+```c++
+static AutoreleasePoolPage *pageForPointer(uintptr_t p) 
+{
+    AutoreleasePoolPage *result;
+    uintptr_t offset = p % SIZE;
+    assert(offset >= sizeof(AutoreleasePoolPage));
+    result = (AutoreleasePoolPage *)(p - offset);
+    result->fastcheck();
+    return result;
+}
+```
+
+主要是通过指针与`page`大小取余得到其偏移量(因为所有的`AutoreleasePoolPage`在内存中都是对其的), 最后通过`fastCheck()`方法检测得到的是不是一个`AutoreleasePoolPage`
+
+之后调用`releaseUntil`循环释放对象, 其定义如下:
+
+```c++
+void releaseUntil(id *stop) 
+{
+    while (this->next != stop) {
+        // Restart from hotPage() every time, in case -release 
+        // autoreleased more objects
+        AutoreleasePoolPage *page = hotPage();
+        // fixme I think this `while` can be `if`, but I can't prove it
+        while (page->empty()) {
+            page = page->parent;
+            setHotPage(page);
+        }
+        page->unprotect();
+        id obj = *--page->next;
+        memset((void*)page->next, SCRIBBLE, sizeof(*page->next));
+        page->protect();
+        if (obj != POOL_BOUNDARY) {
+            objc_release(obj);
+        }
+    }
+    setHotPage(this);
+}
+```
+
+`releaseUntil`方法会先把`next`指针向前移动, 取到将要释放的一个指针, 之后调用`memset`擦除该指针所占内存, 在调用`objc_release`方法释放该指针指向的对象, 这样通过`next`指针循环往前查找要释放对象, 期间可往前跨越多个`page`, 直到找到传进来的哨兵对象为止.
+
+当有嵌套的`autoreleasePool`时, 会清除一层后在清除另一层, 因为`pop`是会释放到上次`push`的位置为止, 和剥洋葱一张, 每层一次, 互不影响
+
+最后如果传入的哨兵对象所在的`page`有`child`, 有两种情况
+* 当前`page`使用不满一半, 从`child page`开始将后面所有的`page`删除
+* 当前`page`使用超过一半, 从`child page`的`child page`(即孙辈)开始将后面所有的`page`删除
+
+```c++
+if (page->child) {
+    // hysteresis: keep one empty child if page is more than half full
+    if (page->lessThanHalfFull()) {
+        page->child->kill();
+    } else if (page->child->child) {
+        page->child->child->kill();
+    }
+}
+```
+
+至于为什么会分这两种情况, 有人猜测可能是空间换时间吧, 当使用超过一半时, 当前`page`可能很快就用完了, 所以将`child page`留着, 减少创建新`page`的开销
+
+`kill()`方法会将后面所有的`page`都删除
+```c++
+void kill() 
+{
+    // Not recursive: we don't want to blow out the stack 
+    // if a thread accumulates a stupendous amount of garbage
+    AutoreleasePoolPage *page = this;
+    while (page->child) page = page->child;
+    AutoreleasePoolPage *deathptr;
+    do {
+        deathptr = page;
+        page = page->parent;
+        if (page) {
+            page->unprotect();
+            page->child = nil;
+            page->protect();
+        }
+        delete deathptr;
+    } while (deathptr != this);
+}
+```
+
+先释放指针,在删除`page`
+
+总结: 调用完前面说的`objc_autoreleasePoolPush`后, 会返回一个`POOL_BOUNDARY`的地址, 当释放池要释放的时候, 会调用`objc_autoreleasePoolPop`函数, 将`POOL_BOUNDARY`作为其入参, 然后会执行如下操作
+* 根据传入的`POOL_BOUNDARY`找到其所在的`page`
+* 从`hotPage`的`next`指针开始往前查找, 向找到的每个指针调用`memset`方法以擦除指针所占内存, 在调用`objc_release`方法释放该指针指向的对象, 直到前一步所找到的`page`的`POOL_BOUNDARY`位置,期间可能跨越多个`page`, 并且在释放前, `next`指针也会往回指向正确的位置
+* 如果有`子page`会`kill`掉`子page`
+
+当有嵌套的`autoreleasePool`时, 会清除一层厚在清除另一层, 因为`pop`是会释放到上次`push`的位置位置, 和剥洋葱类似, 一层一层
+
+
 #### 自动释放池嵌套使用
 
 * 自动释放池以栈的形式存在
@@ -304,7 +525,7 @@ class AutoreleasePoolPage
 
 每个线程(包括主线程)包含一个他自己的自动释放池的栈, 作为一个新的被创建的池子, 他们被添加到栈的顶部. 当池子被释放的时候, 他们从栈中被移除. 自动释放的对象被放在当前线程的自动释放池的顶部(自动释放池也是个栈) 当一个线程终止的时候, 它自动清空与他关联的所有的自动释放池
 
-#### 自动释放池的应用时机
+#### 自动释放池的应用
 
 * 当我们的应用有需要创建大量的临时变量的时候, 可以使用`@autoreleasepoll`来减少内存峰值
 
@@ -328,7 +549,9 @@ class AutoreleasePoolPage
 ```
 
 
+* 自己创建辅助线程
 
+暂时还没有遇到这种case
 
 ## 参考博客
 * [http://aevit.xyz/2017/03/12/iOS-autorelease/](http://aevit.xyz/2017/03/12/iOS-autorelease/)
