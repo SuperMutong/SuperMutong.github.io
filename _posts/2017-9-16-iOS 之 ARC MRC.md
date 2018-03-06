@@ -209,6 +209,20 @@ struct __AtAutoreleasePool {
 
 这个结构的构造函数会调用`objc_autoreleasePoolPush()` 并返回一个`atautoreleasepoolobj`对象, 并其析构函数, 会将`atautoreleasepoolobj`对象作为`objc_autoreleasePoolPop()`的入参.
 
+其实`main.m`中的方法其实就是这样
+```objc
+int main(int argc, const char * argv[]) {
+    {
+        void * atautoreleasepoolobj = objc_autoreleasePoolPush();
+
+        //insert code
+
+        objc_autoreleasePoolPop(atautoreleasepoolobj);
+    }
+    return 0;
+}
+```
+
 这两个函数的实现如下, 后面我们会详细解析这这两个核心函数
 
 ```objc
@@ -218,7 +232,7 @@ void *objc_autoreleasePoolPush(void)
 }
 ```
 
-```
+```objc
 void objc_autoreleasePoolPop(void *ctxt)
 {
     AutoreleasePoolPage::pop(ctxt)
@@ -291,7 +305,7 @@ class AutoreleasePoolPage
 
 * `magic` 用来检验`AutoreleasePoolPage`的结构是否完整
 * `next`指向最新添加的`autoreleased`对象的下一个位置, 初始化时指向`begin()`;
-* `thread`指向当前线程
+* `thread`指向当前页所在的线程
 * `parent`指向父节点, 第一个节点的`parent`值为`nil`
 * `child`指向子节点, 最后一个结点的`child`值为`nil`
 * `depth`代表深度, 从`0`开始, 往后递增`1`
@@ -375,6 +389,49 @@ id *add(id obj)
 
 `add`会把`obj`存放在原本`next`所在的位置, 然后`next`指针++移动到下一个位置
 
+在看下当前`hotPage`已满
+
+`autoreleaseFullPage`会在当前的`hotPage`已满的时候调用
+
+```
+static id *autoreleaseFullPage(id obj, AutoreleasePoolPage *page) {
+    do {
+        if (page->child) page = page->child;
+        else page = new AutoreleasePoolPage(page);
+    } while (page->full());
+
+    setHotPage(page);
+    return page->add(obj);
+}
+```
+他会从传入的`page`开始遍历整个双向链表, 直到:
+* 查找到一个未满的`AutoreleasePoolPage`
+* 使用析构器传入`parent`创建一个新的`AutoreleasePoolPage`
+
+在查到到一个可以使用的`AutoreleasePoolPage`之后, 会将改页面标记成`hotPage`, 然后调用上面分析过的`page->add`方法添加对象
+
+如果当前没有`hotPage`
+
+如果当前内存中不存在`hotpage`,就会调用`autoreleaseNoPage`方法初始化一个`AutoreleasePoolPage`
+
+```
+static id *autoreleaseNoPage(id obj) {
+    AutoreleasePoolPage *page = new AutoreleasePoolPage(nil);
+    setHotPage(page);
+
+    if (obj != POOL_SENTINEL) {
+        page->add(POOL_SENTINEL);
+    }
+
+    return page->add(obj);
+}
+```
+既然当前内存中不存在`AutoreleasePoolPage`, 就要从头开始构建这个自动释放池的双向链表, 也就是说, 新的`AutoreleasePoolPage`是没有`parent`指针的
+
+初始化之后, 将当前页标记为`hotPage`, 然后会先向这个`page`中添加一个`POOL_BOUNDARY`对象, 在`pop`的时候回用到
+
+最后, 将`obj`添加到自动释放池中
+
 接着看`autorelease`方法, 同样也是会调用'autoreleaseFast(obj)'方法
 
 ```c++
@@ -389,6 +446,19 @@ static inline id autorelease(id obj)
 ```
 
 总结: 调用`objc_autoreleasePoolPush`方法时, 这个方法首先在当前`next`指向的位置`add`一个`POOL_BOUNDARY`, 然后当向一个对象方法`autorelease`消息,就会把该对象`add`进`page`里`POOL_BOUNDARY`后面, 之后`next`指向刚插入的位置的下一个内存地址. 当当前`page`快满的时候(即`next`即将指向栈顶`end()`位置), 说明这一页`page`快满了, 如果这个时候再加入一个对象, 会先建立下一页`page`, 双向链表建立完成后, 新的`page`的`next`指向该页的栈底`begin()`位置, 然后继续向栈顶添加新的指针, 周而复始.
+
+#### POOL_BOUNDARY (哨兵对象)
+
+前面提到了`POOL_BOUNDARY`, 那它到底是什么, 以及为什么在栈中
+
+其实`POOL_BOUNDARY`只是`nil`的别名, 请看源代码
+```objc
+#define POOL_SENTINEL nil
+```
+
+在每个自动释放池初始化调用`objc_autoreleasePoolPush`的时候, 都会把一个`POOL_BOUNDARY` push 到自动释放池的栈顶, 并返回这个`POOL_BOUNDARY`哨兵对象, 
+
+在讲解`main.m`函数的时候, 调用`objc_autoreleasePoolPush`会返回一个`atautoreleasepoolObj`对象, 这个对象就是一个`POOL_BOUNDARY`, 在调用`objc_autoreleasePoolPop`的时候要把这个哨兵对象传入, 下面详细解释下`objc_autoreleasePoolPop`
 
 #### objc_autoreleasePoolPop
 
