@@ -153,24 +153,6 @@ NSLog(p)
 
 ## 自动释放池
 
-### autorelease
-
-先说下 `autorelease`, `autorelease`是一种支持引用计数的内存管理方式, 只要给对象发送一条` autorelease`消息, 会将对象放到一个自动释放池中, 当自动释放池被销毁时, 会对池子里的所有对象发送`release`操作, 如果当前引用计数为0, 就会调用当前对象的`dealloc`方法
-
-#### autorelease 好处
-* 不用关心对象释放的时间
-* 不用关心什么时候调用`release`
-
-#### autorelease 原理实质
-
-`autorelease` 实际上只是把对`release`的调用延迟了, 当对一个对象添加`autorelease`, 只是把该对象放入了当前的`autorelease pool`, 当该`pool`释放时, 该`pool`中的所有对象都会被调用`release`
-
-#### autorelease对象在什么时候释放
-
-有无显示的创建`autoreleasePool`为准分为两种
-* 显示使用`@autoreleasePool`, 会在大括号结束的时候释放
-* 没有显示的创建`@autoreleasePool`, 由系统自己创建,系统会自动释放, 释放实际在当前`runloop`准备进入休眠(`BeforeWaiting`)的时候调用`pop`和`push`来释放旧的池子并创建新的池子
-
 ### AutoReleasePool
 
 #### 用途
@@ -470,7 +452,7 @@ void objc_autoreleasePoolPop(void *ctxt)
 }
 ```
 
-静态方法`pop(ctxt)`(`ctxt`是前面`push`后返回的哨兵对象), 接着看下 `pop`方法
+静态方法`pop(ctxt)`(`ctxt`一般是前面`push`后返回的哨兵对象, 也可以传入任何一个指针, ), 接着看下 `pop`方法
 ```c++
 static inline void pop(void *token) 
 {
@@ -622,6 +604,47 @@ void kill()
 * 自己创建辅助线程
 
 暂时还没有遇到这种case
+
+
+### autorelease
+
+理解了自动释放池, 说下`autorelease`, `autorelease`是一种支持引用计数的内存管理方式, 只要给对象发送一条` autorelease`消息, 会将对象放到一个自动释放池中, 当自动释放池被销毁时, 会对池子里的所有对象发送`release`操作, 如果当前引用计数为0, 就会调用当前对象的`dealloc`方法
+
+#### autorelease 好处
+* 不用关心对象释放的时间
+* 不用关心什么时候调用`release`
+
+#### autorelease 原理实质
+
+`autorelease` 实际上只是把对`release`的调用延迟了, 当对一个对象添加`autorelease`, 只是把该对象放入了当前的`autorelease pool`, 当该`pool`释放时, 该`pool`中的所有对象都会被调用`release`
+
+#### autorelease 方法的实现
+
+这里面很多方法下面都会详细解释
+```
+- [NSObject autorelease]
+└── id objc_object::rootAutorelease()
+    └── id objc_object::rootAutorelease2()
+        └── static id AutoreleasePoolPage::autorelease(id obj)
+            └── static id AutoreleasePoolPage::autoreleaseFast(id obj)
+                ├── id *add(id obj)
+                ├── static id *autoreleaseFullPage(id obj, AutoreleasePoolPage *page)
+                │   ├── AutoreleasePoolPage(AutoreleasePoolPage *newParent)
+                │   └── id *add(id obj)
+                └── static id *autoreleaseNoPage(id obj)
+                    ├── AutoreleasePoolPage(AutoreleasePoolPage *newParent)
+                    └── id *add(id obj)
+```
+
+在`autorelease`方法的调用栈中, 最终都会调用`autoreleaseFast`方法, 将当前对象加到`AutoreleasePoolpage`中
+
+
+#### autorelease对象在什么时候释放
+
+有无显示的创建`autoreleasePool`为准分为两种
+* 显示使用`@autoreleasePool`, 会在大括号结束的时候释放
+* 没有显示的创建`@autoreleasePool`, 由系统自己创建,系统会自动释放, 释放实际在当前`runloop`准备进入休眠(`BeforeWaiting`)的时候调用`pop`和`push`来释放旧的池子并创建新的池子
+
 
 ## 参考博客
 * [http://aevit.xyz/2017/03/12/iOS-autorelease/](http://aevit.xyz/2017/03/12/iOS-autorelease/)
