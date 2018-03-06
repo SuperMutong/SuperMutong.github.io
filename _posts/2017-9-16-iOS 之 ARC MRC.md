@@ -92,7 +92,7 @@ MRC:Manual Reference Counting 手动引用计数
 空指针: 没有指向存储空间的指针(里面存的是 nil), 向空指针发消息是没有任何反应的
 ```
 
-MRC 的原则是谁用谁 `retain`/`alloc`/`new`, 谁不用谁release
+MRC 的原则是谁用谁 `retain`/`alloc`/`new`, 谁不用谁`release`
 
 上段代码
 
@@ -111,13 +111,311 @@ NSLog(p.class);
 
 ```
 
+### retain
+既然聊到了`retain`和`release`, 那么就讲下`retain`和`release`的实现细节, 从`retain`引用计数加一开始
+
+下面是`retain`方法的调用栈
+
+```objc
+- [NSObject retain]
+└── id objc_object::rootRetain()
+    └── id objc_object::rootRetain(bool tryRetain, bool handleOverflow)
+        ├── uintptr_t LoadExclusive(uintptr_t *src)
+        ├── uintptr_t addc(uintptr_t lhs, uintptr_t rhs, uintptr_t carryin, uintptr_t *carryout)
+        ├── uintptr_t bits
+        │   └── uintptr_t has_sidetable_rc  
+        ├── bool StoreExclusive(uintptr_t *dst, uintptr_t oldvalue, uintptr_t value)
+        └── bool objc_object::sidetable_addExtraRC_nolock(size_t delta_rc)                
+            └── uintptr_t addc(uintptr_t lhs, uintptr_t rhs, uintptr_t carryin, uintptr_t *carryout)
+```
+
+这里面的`id objc_object::rootRetain(bool tryRetain, bool handleOverflow)`方法是调用栈中最重要的方法, 其原理就是将`isa`结构体中的`extra_rc`的值加1
+
+`extra_rc` 用于保存<kbd>额外</kbd>的自动引用计数的标志位, 下面是`isa`结构体中的结构, `isa`是在`objc_object`这个结构体, 在学习`Runtime`的时候学习过
+
+下面是`isa_t`结构体的结构:
+![](https://img.draveness.me/2016-05-27-objc-rr-isa-struct.png-1000width)
+
+接下来我们会分三种情况对`rootRetain`进行分析
+* 正常的rootRetain
+* 有进位版的rootRetain
+* 有进位版本的rootRetain(处理移除)
+
+#### 正常的 rootRetain
+这个是简化后的`rootRetain`方式的实现, 其中只处理一般情况的代码
+
+```objc
+id objc_object::rootRetain(bool tryRetain, bool handleOverflow) {
+    isa_t oldisa;
+    isa_t newisa;
+
+    do {
+        oldisa = LoadExclusive(&isa.bits);
+        newisa = oldisa;
+
+        uintptr_t carry;
+        newisa.bits = addc(newisa.bits, RC_ONE, 0, &carry);
+    } while (!StoreExclusive(&isa.bits, oldisa.bits, newisa.bits));
+
+    return (id)this;
+}
+```
+
+这种case是加色`extra_rc`的位数足以存储`retainCount`
+
+- 使用`LoadExclusive`加载`isa`的值
+- 调用`addc(newisa.bits,RC_ONE,0,&carry)`方法将`isa`的值加一
+- 调用`StoreExclusive(&isa.bits,oldisa.bits,newisa.bits)`更新`isa`的值
+- 返回当前对象
+
+#### 有进位版本的rootRetain
+
+在这里调用`addc`方法为`extra_rc`加一时, 8位的`extra_rc`可能不足以保存引用计数.
+```objc
+id objc_object::rootRetain(bool tryRetain, bool handleOverflow) {
+    transcribeToSideTable = false;
+    isa_t oldisa = LoadExclusive(&isa.bits);
+    isa_t newisa = oldisa;
+
+    uintptr_t carry;
+    newisa.bits = addc(newisa.bits, RC_ONE, 0, &carry);
+
+    if (carry && !handleOverflow)
+        return rootRetain_overflow(tryRetain);
+}
+```
+当方法传入的`handleOverflow == false`时(这个也是通常情况), 我们会调用`rootRetain_overflow`方法:
+```objc
+id objc_object::rootRetain_overflow(bool tryRetain) {
+    return rootRetain(tryRetain, true);
+}
+```
+这个方法其实就是重新执行`rootRetain`方法, 并传入`handleOverflow = true`
+
+#### 有进位版本的 rootRetain (处理溢出)
+
+当传入的handleOverflow = true 时, 我们就会在`rootRetain`方法中处理引用计数的溢出
+```objc
+id objc_object::rootRetain(bool tryRetain, bool handleOverflow) {
+    bool sideTableLocked = false;
+
+    isa_t oldisa;
+    isa_t newisa;
+
+    do {
+        oldisa = LoadExclusive(&isa.bits);
+        newisa = oldisa;
+        uintptr_t carry;
+        newisa.bits = addc(newisa.bits, RC_ONE, 0, &carry);
+
+        if (carry) {
+            newisa.extra_rc = RC_HALF;
+            newisa.has_sidetable_rc = true;
+        }
+    } while (!StoreExclusive(&isa.bits, oldisa.bits, newisa.bits));
+
+    sidetable_addExtraRC_nolock(RC_HALF);
+
+    return (id)this;
+}
+```
+
+当调用这个方法, 并且`handleOverflow = true`时, 我们就可以确定`carry`一定是存在的了, 因为`extra_rc`已经溢出了, 所以要更新他的值为`RC_HALF`
+```objc
+#define RC_HALF (1ULL<<7)
+```
+然后设置`has_sidetable_rc`为真, 存储新的`isa`的值以后, 调用`sidetable_addExtraRC_noLock`方法
+
+```objc
+bool objc_object::sidetable_addExtraRC_nolock(size_t delta_rc) {
+    SideTable& table = SideTables()[this];
+
+    size_t& refcntStorage = table.refcnts[this];
+    size_t oldRefcnt = refcntStorage;
+
+    if (oldRefcnt & SIDE_TABLE_RC_PINNED) return true;
+
+    uintptr_t carry;
+    size_t newRefcnt =
+        addc(oldRefcnt, delta_rc << SIDE_TABLE_RC_SHIFT, 0, &carry);
+    if (carry) {
+        refcntStorage = SIDE_TABLE_RC_PINNED | (oldRefcnt & SIDE_TABLE_FLAG_MASK);
+        return true;
+    } else {
+        refcntStorage = newRefcnt;
+        return false;
+    }
+}
+```
+这里我们将溢出的一位`RC_HALF`添加到`oldRefcnt`中, 其中的各种`SIDE_TABLE`宏定义如下:
+```objc
+#define SIDE_TABLE_WEAKLY_REFERENCED (1UL<<0)
+#define SIDE_TABLE_DEALLOCATING      (1UL<<1)
+#define SIDE_TABLE_RC_ONE            (1UL<<2)
+#define SIDE_TABLE_RC_PINNED         (1UL<<(WORD_BITS-1))
+
+#define SIDE_TABLE_RC_SHIFT 2
+#define SIDE_TABLE_FLAG_MASK (SIDE_TABLE_RC_ONE-1)
+```
+
+因为`refcnts`中的64位的最低两位是有意义的标志位, 所以在使用`addc`时要将`delta_rc`左移两位,获得一个新的引用计数`newRefcnt`
+
+如果这时出现了溢出, 那么就会撤销这次的行为, 否则, 会将新的引用计数存储到`refcntStorage`指针中
+
+也就是说, 在 iOS的内存管理中, 我们使用了`isa`结构体中的`extra_rc`和`SideTable`来存储某个对象的自动引用计数
+
+另外`extra_rc`保存的是额外的引用计数, 当一个对象的引用计数为1, 那么`extra_rc`实际上是0, 苹果这么做可能是能够减少很多不必要的函数调用吧
+
+### release
+
+先看下方法简化后的调用栈
+
+```objc
+- [NSObject release]
+└── id objc_object::rootRelease()
+    └── id objc_object::rootRetain(bool performDealloc, bool handleUnderflow)
+```
+
+`retain`有三种case, 理论上`release`也会有三种对应的方法
+
+先看下最简单的
+
+#### 正常的release
+
+```objc
+bool objc_object::rootRelease(bool performDealloc, bool handleUnderflow) {
+    isa_t oldisa;
+    isa_t newisa;
+
+    do {
+        oldisa = LoadExclusive(&isa.bits);
+        newisa = oldisa;
+
+        uintptr_t carry;
+        newisa.bits = subc(newisa.bits, RC_ONE, 0, &carry);
+    } while (!StoreReleaseExclusive(&isa.bits, oldisa.bits, newisa.bits));
+
+    return false;
+}
+```
+
+- 使用`loadExclusive`获取`isa`内容
+- 将`isa`中的引用计数减一
+- 调用`StoreReleaseExclusice`方法保存新的`isa`
+
+#### 从 SideTable 借位
+
+```objc
+bool objc_object::rootRelease(bool performDealloc, bool handleUnderflow) {
+    isa_t oldisa;
+    isa_t newisa;
+
+    do {
+        oldisa = LoadExclusive(&isa.bits);
+        newisa = oldisa;
+
+        uintptr_t carry;
+        newisa.bits = subc(newisa.bits, RC_ONE, 0, &carry);
+        if (carry) goto underflow;
+    } while (!StoreReleaseExclusive(&isa.bits, oldisa.bits, newisa.bits));
+
+    ...
+
+ underflow:
+    newisa = oldisa;
+
+    if (newisa.has_sidetable_rc) {
+        if (!handleUnderflow) {
+            return rootRelease_underflow(performDealloc);
+        }
+
+        size_t borrowed = sidetable_subExtraRC_nolock(RC_HALF);
+
+        if (borrowed > 0) {
+            newisa.extra_rc = borrowed - 1;
+            bool stored = StoreExclusive(&isa.bits, oldisa.bits, newisa.bits);
+
+            return false;
+        }
+    }
+}
+```
+这里也有一个`handleUnderflow`, 与`retain`中的相同, 如果发生了`underflow`, 会重新调用该`rootRelease`方法, 并传入`handleUnderFlow = true`
+
+在调用`sideTable_subExtraRC_nolock`成功借位之后, 我们会重新设置`newisa`的值`newisa.extra_rc = borrowed-1`并更新`isa`
+
+#### dealloc
+
+如果在`SideTable`中也没有获取到借位的话, 就说明没有任何的变量引用了当前对象(即retainCount = 0), 就需要向她发送`dealloc`消息了
+
+```objc
+bool objc_object::rootRelease(bool performDealloc, bool handleUnderflow) {
+    isa_t oldisa;
+    isa_t newisa;
+
+ retry:
+    do {
+        oldisa = LoadExclusive(&isa.bits);
+        newisa = oldisa;
+
+        uintptr_t carry;
+        newisa.bits = subc(newisa.bits, RC_ONE, 0, &carry);
+        if (carry) goto underflow;
+    } while (!StoreReleaseExclusive(&isa.bits, oldisa.bits, newisa.bits));
+
+    ...
+
+ underflow:
+    newisa = oldisa;
+
+    if (newisa.deallocating) {
+        return overrelease_error();
+    }
+    newisa.deallocating = true;
+    StoreExclusive(&isa.bits, oldisa.bits, newisa.bits);
+
+    if (performDealloc) {
+        ((void(*)(objc_object *, SEL))objc_msgSend)(this, SEL_dealloc);
+    }
+    return true;
+}
+```
+上述代码会直接调用`objc_msgSend`向当前对象发送`dealloc`消息
+
+不过为了确保消息只会发送一次, 系统使用了`deallocating`标记位
+
+#### 获取自动引用计数
+
+我们来看下`retainCount`方法的实现
+```objc
+- (NSUInteger)retainCount {
+    return ((id)self)->rootRetainCount();
+}
+
+inline uintptr_t objc_object::rootRetainCount() {
+    isa_t bits = LoadExclusive(&isa.bits);
+    uintptr_t rc = 1 + bits.extra_rc;
+    if (bits.has_sidetable_rc) {
+        rc += sidetable_getExtraRC_nolock();
+    }
+    return rc;
+}
+```
+看实现可以发现, retainCount有三部分组成
+- 1
+- extra_rc 中存储的值
+- sideTable_getExtraRC_nolock返回的值
+
+这也就证明了我们之前得到的结论
+
+
 ## ARC
 
 ARC: Automatic Reference Counting 自动引用计数
 
 自动维护引用计数, 并释放当前堆空间. 不需要程序员去关心内存释放问题.
 
-iOS5 推出的功能, ARC 所做的无非就是在合适的时机(应该是编译器和运行期)帮我们添加,`retain`,`release`或者`autoRelease`, 无需程序员手动敲这些代码, 极大的节省了时间, 并且避免了因忘记释放造成的内存泄露, 但是从本质上讲, 它与 MRC 还是无异的
+iOS5 推出的功能, ARC 所做的无非就是在合适的时机(应该是编译期的某个时机,我还没有发现)帮我们添加,`retain`,`release`或者`autoRelease`, 无需程序员手动敲这些代码, 极大的节省了时间, 并且避免了因忘记释放造成的内存泄露, 但是从本质上讲, 它与 MRC 还是无异的
 
 ### 释放原则
 
