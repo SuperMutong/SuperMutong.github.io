@@ -51,17 +51,29 @@ tags:
 
 ```objc
     int a = 10; //全局初始化区;
+
     char *p; //未初始化全局区;
+    
     main {
+    
         int b; //栈区;
+    
         char s[] = "abc"; //栈区;
+    
         char *p1; //栈区;
+    
         char *p2 = "1231"; // p2 在栈上, 1231 在常量区;
+    
         static int c = 0; //全局(静态)初始化区;
+    
         NSObject *p = [[NSObject alloc]init]; // p 在栈上, 后面的那个对象在堆上;
+    
         //这个字符串老复杂了,根据字符串长度编译器会自动优化成三种类型,根据这三种类型在判断存储常量区还是栈上, 看最下面博客参考[NSString];
+    
         NSString *str = @"123";
+    
         //苹果在2013年引入了`Tagged Pointer`对 NSNumber 和 NSDate,做了优化,不受引用计数影响,可以看下最下方唐巧的博客关于`Tagged Pointer`的介绍;
+    
         NSNumber *number = [NSNumber alloc]init];
     }
 ```
@@ -104,11 +116,17 @@ MRC 的原则是谁用谁 `retain`/`alloc`/`new`, 谁不用谁`release`
 NSObject *p = [NSObject alloc]init]; //alloc 以后, p的引用计数已经变为1了, 默认就是1;
 ...
 //p 不用了, 需要 release;
+
 [p release];
+
 //如果这个时候你调用 p , 就会报错 `EXC_BAD_ACCESS` 野指针错误;
+
 NSLog(p.class);
+
 //当一块堆空间被标记可以删除后, 即使暂时没有新的数据填充这块空间, 原来空间的数据也不能"复活"过来重新使用;
+
 //也会报野指针的错误;
+
 [p retain];
 ```
 
@@ -245,12 +263,17 @@ bool objc_object::sidetable_addExtraRC_nolock(size_t delta_rc) {
 ```
 这里我们将溢出的一位`RC_HALF`添加到`oldRefcnt`中, 其中的各种`SIDE_TABLE`宏定义如下:
 ```objc
-#define SIDE_TABLE_WEAKLY_REFERENCED (1UL<<0);
-#define SIDE_TABLE_DEALLOCATING      (1UL<<1);
-#define SIDE_TABLE_RC_ONE            (1UL<<2);
-#define SIDE_TABLE_RC_PINNED         (1UL<<(WORD_BITS-1));
-#define SIDE_TABLE_RC_SHIFT 2;
-#define SIDE_TABLE_FLAG_MASK (SIDE_TABLE_RC_ONE-1);
+#define SIDE_TABLE_WEAKLY_REFERENCED (1UL<<0)
+
+#define SIDE_TABLE_DEALLOCATING      (1UL<<1)
+
+#define SIDE_TABLE_RC_ONE            (1UL<<2)
+
+#define SIDE_TABLE_RC_PINNED         (1UL<<(WORD_BITS-1))
+
+#define SIDE_TABLE_RC_SHIFT 2
+
+#define SIDE_TABLE_FLAG_MASK (SIDE_TABLE_RC_ONE-1)
 ```
 
 因为`refcnts`中的64位的最低两位是有意义的标志位, 所以在使用`addc`时要将`delta_rc`左移两位,获得一个新的引用计数`newRefcnt`
@@ -428,11 +451,17 @@ ARC 创建的对象默认都是`storng`, 如果你在创建对象的时候用的
 
 ```objc
 //这里举例用的是 NSObject , 最好别用其他的变量, 因为NSObjct对象肯定是保存在堆上, 完全受ARC影响;
+
 //如果用 NSString 和 NSNumber, 有的时候运行结果和猜测不一样;
+
 //具体原因请看最上面的内存分配;
+
 __weak NSObject *p = [NSObject alloc]init];
+
 // p会立即释放 这个时候打印 p 直接就是 nil;
+
 NSLog(p);
+
 ```
 
 
@@ -489,7 +518,10 @@ struct __AtAutoreleasePool {
 int main(int argc, const char * argv[]) {
     {
         void * atautoreleasepoolobj = objc_autoreleasePoolPush();
+
+        
         //insert code;
+        
         objc_autoreleasePoolPop(atautoreleasepoolobj);
     }
     return 0;
@@ -557,7 +589,9 @@ class AutoreleasePoolPage
 #   define POOL_BOUNDARY nil
 
     static pthread_key_t const key = AUTORELEASE_POOL_KEY;
+    
     static uint8_t const SCRIBBLE = 0xA3;  // 0xA3A3A3A3 after releasing;
+
     static size_t const SIZE = 
 
 #if PROTECT_AUTORELEASEPOOL
@@ -620,6 +654,7 @@ static inline void *push()
     id *dest;
     if (DebugPoolAllocation) {
         // Each autorelease pool starts on a new pool page;
+
         dest = autoreleaseNewPage(POOL_BOUNDARY);
     } else {
         dest = autoreleaseFast(POOL_BOUNDARY);
@@ -635,6 +670,7 @@ static inline void *push()
 static inline id *autoreleaseFast(id obj)
 {
     //获取当前正在使用的page;
+
     AutoreleasePoolPage *page = hotPage();
     if (page && !page->full()) {
         return page->add(obj);
@@ -663,6 +699,7 @@ id *add(id obj)
     assert(!full());
     unprotect();
     id *ret = next;  // faster than `return next-1` because of aliasing;
+
     *next++ = obj;
     protect();
     return ret;
@@ -763,6 +800,7 @@ static inline void pop(void *token)
     
     if (page->child) {
         // hysteresis: keep one empty child if page is more than half full;
+
         if (page->lessThanHalfFull()) {
             page->child->kill();
         } else if (page->child->child) {
@@ -796,8 +834,10 @@ void releaseUntil(id *stop)
     while (this->next != stop) {
         // Restart from hotPage() every time, in case -release;
         // autoreleased more objects;
+
         AutoreleasePoolPage *page = hotPage();
         // fixme I think this `while` can be `if`, but I can't prove it;
+        
         while (page->empty()) {
             page = page->parent;
             setHotPage(page);
@@ -825,6 +865,7 @@ void releaseUntil(id *stop)
 ```c++
 if (page->child) {
     // hysteresis: keep one empty child if page is more than half full;
+
     if (page->lessThanHalfFull()) {
         page->child->kill();
     } else if (page->child->child) {
@@ -840,7 +881,9 @@ if (page->child) {
 void kill() 
 {
     // Not recursive: we don't want to blow out the stack;
+
     // if a thread accumulates a stupendous amount of garbage;
+    
     AutoreleasePoolPage *page = this;
     while (page->child) page = page->child;
     AutoreleasePoolPage *deathptr;
@@ -890,8 +933,11 @@ void kill()
 ```objc
     for (int i =0 ; i<NSIntegerMax; i++) {
 //        @autoreleasepool{;
+
         NSString *Str = [NSString stringWithFormat:@"自动释放池"];
+
 //        };
+    
     }
 ```
 
@@ -900,7 +946,9 @@ void kill()
 我当前测试的系统是 ios11, 使用数组的block版本的枚举,系统内部都会自动添加一个`autoreleasePool`:
 ```objc
 [array enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+
     // 这里被一个局部@autoreleasepool包围着
+
 }];
 ```
 
