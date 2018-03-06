@@ -414,7 +414,7 @@ iOS5 推出的功能, ARC 所做的无非就是在合适的时机(应该是编�
 
 ### 释放原则
 
-在 ARC 中,所有实例变量和局部变量默认情况下都是`strong`类型, 类似于 MRC 中的`retain`,只要某个对象被任一`strong`指针指向, 那么它都不会被销毁, 相反的, 如果对象没有被任何`strong`类型的指针指向, 那么就将被销毁. 与`strong`相对是`weak`, `weak`类型的指针可以指向对象, 但是不会只有该对象, 当对象被销毁, `weak`会自动指向 nil, weak 类型的指针一般用在两个对象之间存在包含关系时, 常见的就是 `delegate`模式.
+在 ARC 中,所有实例变量和局部变量默认情况下都是`strong`类型, 类似于 MRC 中的`retain`,只要某个对象被任一`strong`指针指向, 那么它都不会被销毁, 相反的, 如果对象没有被任何`strong`类型的指针指向, 那么就将被销毁. 与`strong`相对是`weak`, `weak`类型的指针可以指向对象, 但是不会持有该对象, 当对象被销毁, `weak`会自动指向 nil, weak 类型的指针一般用在两个对象之间存在包含关系时, 常见的就是 `delegate`模式.
 
 ARC 判断一个对象是否需要释放不是通过引用计数来判断的, 而是通过`强指针`来进行判断
 
@@ -436,7 +436,7 @@ NSLog(p);
 ```
 
 
-即使有了 ARC 也不能解决所有问题, ARC 只适用 OC 对象(还得去除 NSDate NSNumber 部分 NSString), 对于底层的东西, 例如 `Core Foundation` 就不在 ARC 的管辖范围内, 为了做好两者的链接, 需要使用三个关键字, __bridge __bridge_retained __bridge_transfer:
+即使有了 ARC 也不能解决所有问题, ARC 只适用 OC 对象(还得去除 NSDate,NSNumber,部分 NSString), 对于底层的东西, 例如 `Core Foundation` 就不在 ARC 的管辖范围内, 为了做好两者的链接, 需要使用三个关键字, `__bridge` `__bridge_retained` `__bridge_transfer`:
 
 * __bridge 
     只做类型转换, 不修改内存管理权
@@ -454,11 +454,9 @@ NSLog(p);
 
 存储在自动释放池的对象, 在自动释放池销毁时, 会自动调用该对象的`release`方法, 如果引用计数为0, 会自动调用`dealloc`方法, 不需要用户自己写 `release`
 
-#### 原理
+#### 底层实现
 
 自动释放池是由多个`AutoreleasePoolPage`组成的`双向链表`, 其中主要通过`push`和`pop`操作来管理
-
-#### 底层实现
 
 * 我们先用`clang` 把`main.m`转成`c++`文件, 里面可以看到`autoreleasePool`的源码
 
@@ -729,7 +727,7 @@ static inline id autorelease(id obj)
 }
 ```
 
-总结: 调用`objc_autoreleasePoolPush`方法时, 这个方法首先在当前`next`指向的位置`add`一个`POOL_BOUNDARY`, 然后当向一个对象方法`autorelease`消息,就会把该对象`add`进`page`里`POOL_BOUNDARY`后面, 之后`next`指向刚插入的位置的下一个内存地址. 当当前`page`快满的时候(即`next`即将指向栈顶`end()`位置), 说明这一页`page`快满了, 如果这个时候再加入一个对象, 会先建立下一页`page`, 双向链表建立完成后, 新的`page`的`next`指向该页的栈底`begin()`位置, 然后继续向栈顶添加新的指针, 周而复始.
+总结: 调用`objc_autoreleasePoolPush`方法时, 这个方法首先在当前`next`指向的位置`add`一个`POOL_BOUNDARY`, 然后当向一个对象方法`autorelease`消息,就会把该对象`add`进`page`里`POOL_BOUNDARY`后面, 之后`next`指向刚插入的位置的下一个内存地址. 当前`page`快满的时候(即`next`即将指向栈顶`end()`位置), 说明这一页`page`快满了, 如果这个时候再加入一个对象, 会先建立下一页`page`, 双向链表建立完成后, 新的`page`的`next`指向该页的栈底`begin()`位置, 然后继续向栈顶添加新的指针, 周而复始.
 
 #### POOL_BOUNDARY (哨兵对象)
 
