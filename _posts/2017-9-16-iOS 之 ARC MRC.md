@@ -935,7 +935,6 @@ void kill()
 //        @autoreleasepool{;
 
         NSString *Str = [NSString stringWithFormat:@"自动释放池"];
-
 //        };
     
     }
@@ -946,7 +945,6 @@ void kill()
 我当前测试的系统是 ios11, 使用数组的block版本的枚举,系统内部都会自动添加一个`autoreleasePool`:
 ```objc
 [array enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
-
     // 这里被一个局部@autoreleasepool包围着
 
 }];
