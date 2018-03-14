@@ -85,16 +85,26 @@ typedef struct objc_selector *SEL
 ```objc
 struct objc_class:objc_object{
 	Class isa;  //isa指向其所属的元类
+
     Class super_class;  //超类
-	const char *name; //类名
-	long version;   //类的版本信息
-	long info;  //类的详情
-	struct objc_ivar_list *ivars;  //类的成员变量列表
-	struct objc_method_list **methodLists; //实例方法列表 即 -func
-	struct objc_cache *cache;  //被调用的方法存到 cache 中, 方便下次查找
-	struct objc_protocol_list *protocols;  //该类的协议列表
-	class_data_bits_t bits; 
-	}
+	
+    const char *name; //类名
+	
+    long version;   //类的版本信息
+	
+    long info;  //类的详情
+	
+    struct objc_ivar_list *ivars;  //类的成员变量列表
+	
+    struct objc_method_list **methodLists; //实例方法列表 即 -func
+	
+    struct objc_cache *cache;  //被调用的方法存到 cache 中, 方便下次查找
+	
+    struct objc_protocol_list *protocols;  //该类的协议列表
+	
+    class_data_bits_t bits; 
+	
+    }
 
 ```
 
