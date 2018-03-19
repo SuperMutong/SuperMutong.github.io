@@ -133,6 +133,20 @@ NSLog(p.class);
 ### retain
 既然聊到了`retain`和`release`, 那么就讲下`retain`和`release`的实现细节, 从`retain`引用计数加一开始
 
+先看下源码
+
+```oc
+objc_object::rootRetain()
+{
+    assert(!UseGC);
+
+    if (isTaggedPointer()) return (id)this;
+    return sidetable_retain();
+}
+```
+
+ios 在64位的时候引入了`TaggedPointer`的机制, 如果对象使用了`TaggedPointer`的机制, 当前对象时放在了栈上, 不受正常的引用计数控制
+
 下面是`retain`方法的调用栈
 
 ```c++
@@ -285,6 +299,18 @@ bool objc_object::sidetable_addExtraRC_nolock(size_t delta_rc) {
 另外`extra_rc`保存的是额外的引用计数, 当一个对象的引用计数为1, 那么`extra_rc`实际上是0, 苹果这么做可能是能够减少很多不必要的函数调用吧
 
 ### release
+
+源码
+```oc
+inline bool 
+objc_object::rootRelease()
+{
+    assert(!UseGC);
+
+    if (isTaggedPointer()) return false;
+    return sidetable_release(true);
+}
+```
 
 先看下方法简化后的调用栈
 
