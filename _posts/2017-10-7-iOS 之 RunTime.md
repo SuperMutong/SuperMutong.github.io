@@ -51,6 +51,17 @@ tags:
 ```objc
 id objc_msgSend(id self, SEL op, ...)
 ```
+
+因为 `objc_msgSend`使用汇编写的,  所以可以看一下他的伪代码, 大概意思就是获取IMP并调用
+
+```oc
+id objc_msgSend(id self, SEL _cmd, ...) {
+  Class class = object_getClass(self);
+  IMP imp = class_getMethodImplementation(class, _cmd);
+  return imp ? imp(self, _cmd, ...) : 0;
+}
+```
+
 参数解读
 
 #### id 他是一个指向类实例的指针
@@ -373,7 +384,11 @@ for (int i = 0; i < outCount; i ++) {
 &emsp;&emsp;`forwardInvocation` 方法就像一个不能识别的消息的分发中心, 将这些消息转发给不同接收对象, 或者他也可以像一个运输站将所有的消息都发送给同一个接收对象, 他可以将一个消息翻译成另外一个消息, 或者简单的`吃掉`某些消息, 因此没有响应也没有错误, `forwardInvocation:` 方法也可以对不同的消息提供相同的响应, 这一切取决于方法的具体实现
 
 &emsp;&emsp;注意:`forwardInvocation` 方法只有在消息接收对象中无法响应消息的时候才会被调用, 所以我们希望一个对象将 `A` 消息转发给其他对象, 这个对象不能有 `A`方法, 否则, `forwardInvocation` 将不可能被调用.
-					
+
+下面这篇博客写的很详细				
+
+[消息发送以及转发](http://yulingtianxia.com/blog/2016/06/15/Objective-C-Message-Sending-and-Forwarding/)
+
 #### 转发和多继承
 &emsp;&emsp;一个对象把消息转发出去, 就好似它把另一个对象的方法借过来或是`继承`过来一样
 
