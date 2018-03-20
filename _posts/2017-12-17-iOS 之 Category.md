@@ -60,6 +60,10 @@ typedef struct category_t{
 
 #### 4. 方法冲突
 
+1. `Category`中的`load`方法和类中的`load`方法调用顺序
+	答: 父类先于子类调用
+		类先于分类调用
+
 1. 在类和 `Category` 中都可以有 `+load` 方法, 调用顺序是咋样的
 
 	答: 先类后 `Category`, 而 `Category` 的 `+load` 执行顺序是根据编译顺序决定的, 谁先编译, 先执行谁, 可以在 XCode Compile Sources 中修改
@@ -72,6 +76,8 @@ typedef struct category_t{
 1. `Category` 的方法和 类的方法冲突了, 我想调用类的方法咋办
 
 	答: 在运行时的时候获取类和 `Category` 结合的方法列表, 然后遍历, 获取最后一个方法
+
+
 
 #### 		5. 关联对象
 1. `Category` 无法添加实例变量, 但是我们可以添加和对象关联的值, 使用 runtime
@@ -245,4 +251,5 @@ static const char associatedKey
 * [https://tech.meituan.com/DiveIntoCategory.html](https://tech.meituan.com/DiveIntoCategory.html) 
 * [http://www.cnblogs.com/crazypebble/p/3439261.html](http://www.cnblogs.com/crazypebble/p/3439261.html) 
 * [https://www.cnblogs.com/Jenaral/p/5970393.html](https://www.cnblogs.com/Jenaral/p/5970393.html)
+* [http://www.cocoachina.com/ios/20160516/16273.html](http://www.cocoachina.com/ios/20160516/16273.html)
 
