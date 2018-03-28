@@ -3,7 +3,7 @@ layout: page
 description: "图难于其易，为大于其细."
 ---
 
-{% for post in paginator.categories.public %}
+{% for post in paginator.posts %}
 <div class="post-preview">
     <a href="{{ post.url | prepend: site.baseurl }}">
         <h2 class="post-title">
