@@ -184,7 +184,7 @@ NSString *e = [NSString stringWithFormat:@"1234567890"]; //__NSCFString
 * 如果长度是8或9, 用六位编码存储字符串, 使用编码表`eilotrm.apdnsIc ufkMShjTRxgC4013bDNvwyUL2O856P-B79AFKEWV_zGJ/HYX`
 * 如果长度是10或11, 使用五位编码存储字符串, 使用编码表`eilotrm.apdnsIc ufkMShjTRxgC4013`
 
-上面的三种情况时要符合编码方式的, 我举个例子, `b`在五位编码是不存在的,一个字符串有`b`和没有`b`是不一样的
+上面的三种情况时要符合编码方式的, 我举个例子, `b`在六位编码和五位编码都是不存在的,一个字符串有`b`和没有`b`是不一样的
 
 看下面这段代码
 ```oc
