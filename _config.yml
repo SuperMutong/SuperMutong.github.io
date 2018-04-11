@@ -54,15 +54,13 @@ kramdown:
 
 
 # 评论系统
-# Disqus（https://disqus.com/）
-# disqus_username: qiubaiying
 
 # Gitalk
 gitalk:
   enable: true    #是否开启Gitalk评论
   clientID: 8dca7ba26960d8b1c104                            #生成的clientID
   clientSecret: d61a7aabfe868a32a04db20ea25ff0af8f629fd9    #生成的clientSecret
-  repo: supermutong.github.io    #仓库名称
+  repo: SuperMutong.github.io    #仓库名称
   owner: SuperMutong    #github用户名
   admin: [SuperMutong]
   distractionFreeMode: true #是否启用类似FB的阴影遮罩
