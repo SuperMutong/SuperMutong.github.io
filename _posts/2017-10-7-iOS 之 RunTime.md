@@ -20,13 +20,13 @@ tags:
 &emsp;&emsp; 为了动态系统的高效, 所以 Runtime  基本是用 C 和汇编写的,
 ###  核心就一句话 -[receiver message]
 &emsp;&emsp;编译器会把他转换成 
-`bjc_msgSend(receiver, selector)` 
+`objc_msgSend(receiver, selector)` 
 或者
 `objc_msgSend(receiver, seletor,arg1,arg2)`
 
 &emsp;&emsp;如果消息的接受者能够找到对应的 selector, 那么就相当于直接执行了接受者这个对象的特定方法, 否则, 消息要么被转发, 或者临时向接受者动态添加这个 selector 对应的实现内容, 要么干脆玩完奔溃
 
-&emsp;&emsp;现在可以看出 '[receiver message]' 真的不是一个简简单单的方法调用, 因为这只是在编译阶段确定了要向接受者发送 message 这条消息, 而 receiver 将要如果响应这条消息, 那就要看运行时发生的情况来决定了
+&emsp;&emsp;现在可以看出 `[receiver message]` 真的不是一个简简单单的方法调用, 因为这只是在编译阶段确定了要向接受者发送 message 这条消息, 而 receiver 将要如果响应这条消息, 那就要看运行时发生的情况来决定了
 
 ###  与 Runtime 交互
 &emsp;&emsp;Objc 从三种不同的层级上与 Runtime 系统进行交互, 分别是通过 OC 源代码, 通过 Foundation 框架的 NSObject 类定义的方法, 通过对 runtime 函数的直接调用
@@ -72,15 +72,15 @@ struct objc_object {
     private:
         isa_t isa;
     public:
-        // ISA() assumes this is NOT a tagged pointer object
+        // ISA() assumes this is NOT a tagged pointer ;
         Class ISA();
-        // getIsa() allows this to be a tagged pointer object
+        // getIsa() allows this to be a tagged pointer object;
         Class getIsa();
          ... 此处省略其他方法声明
 }
 ```
 
-&emsp;&emsp;`objc_object` 结构体包含一个 `isa` 指针, 类型为`isa_t` 联合体, 根据 isa 就可以找到对象所属的类, 但是 `isa` 指针不总是指向实例类对象所属的类, 不能依靠他来确定类型, 而是应该用 class 方法来确认实例对象的类, 因为 `KVO` 的实现机理([面试总结第七条](https://supermutong.github.io/2017/12/27/iOS-%E4%B9%8B-%E9%9D%A2%E8%AF%95%E9%A2%98/#7-kvo-%E5%86%85%E9%83%A8%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86)就是讲被观察对象的 `isa` 指针指向一个中间类而不是真是的类, 这是一种叫做 `isa-swizzling` 的技术
+&emsp;&emsp;`objc_object` 结构体包含一个 `isa` 指针, 类型为`isa_t` 联合体, 根据 isa 就可以找到对象所属的类, 但是 `isa` 指针不总是指向实例类对象所属的类, 不能依靠他来确定类型, 而是应该用 class 方法来确认实例对象的类, 因为 `KVO` 的实现机理([小知识总结第七条](https://supermutong.github.io/2017/12/27/iOS-%E4%B9%8B-%E9%9D%A2%E8%AF%95%E9%A2%98/#7-kvo-%E5%86%85%E9%83%A8%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86)就是讲被观察对象的 `isa` 指针指向一个中间类而不是真是的类, 这是一种叫做 `isa-swizzling` 的技术
 #### SEL 
 &emsp;&emsp;他是 `selector` 在 Objc 中的表达类型(在 Swift 中是`Selector` 类). `selector` 是方法选择器, 可以理解为区分方法的 ID, 而这个 ID 的数据结构是 `SEL`.  
 
@@ -324,7 +324,7 @@ for (int i = 0; i < outCount; i ++) {
 ### objc_msgSend 函数
 #### 消息发送步骤
 1. 检测这个 `Selector `是不是要忽略的, MAC 开发中有个函数是要忽略的
-2. 检测这个 `target` 是不是 `nil `对象, `Objc `的特性是允许对一个 `nil` 对象执行任何一个方法不会 `crash` , 因为被忽略掉了
+2. 检测这个 `target` 是不是 `nil `对象, `Objc `的特性是允许对一个 `nil` 对象执行任何一个方法不会 `crash` , ~~因为被忽略掉了~~ 并不是忽略掉了, 而是直接`return`, 根据返回的参数确定`return`类型, 比如本来这个方法是`return`一个`id`, 那么就会`return` `(null)`, 如果是`Int` 就返回`0`,`CGRect`返回`CGRectMake(0,0,0,0)`
 3. 如果上面两个都过了, 那就开始查找这个类的 `IMP`, 先从 `cache `里面找, 如果找到就跳到对应的函数去执行
 4. 如果 `cache `找不到就找一下方法分发表
 5. 如果方法分发表中找不到就到超类的分发表去找, 一直找, 直到找到 `NSObject `类为止
@@ -419,20 +419,21 @@ fakeIMP(id sender, SEL sel,...){
 		    return nil;	
 }
 @implementation FakeForwardTargetObjct
-	-(instancetype)initWithSelector:(SEL)aSelector{
-		self = [super init];
-		if (self) {
-			if (class_addMethod([self class], aSelector, (IMP)fakeIMP, NULL)) 
-			 {
-			     NSLog(@"add Fake Selector:[instance %@]",NSStringFromSelector(aSelector));
-			}
-	}
-    return self;
-    }
+-(instancetype)initWithSelector:(SEL)aSelector{
+	self = [super init];
+	if (self) {
+		if (class_addMethod([self class], aSelector, (IMP)fakeIMP, NULL)) 
+		 {
+		     NSLog(@"add Fake Selector:[instance %@]",NSStringFromSelector(aSelector));
+		}
+}
+return self;
+}
 @end
 ```	
 
-接着实现转发逻辑
+~~~接着实现转发逻辑~~~
+在实现转发逻辑的时候最好不要再`load`方法中做, 理论上`load`里面的代码会影响启动时间, 我个人的习惯还是放在`appdelegate`的`- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {}`,
 	
 ```objc
 -implementation NSObject (safeSwizzle)
