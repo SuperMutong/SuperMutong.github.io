@@ -93,7 +93,7 @@ ClassA.m
 }
 ```
 2. 对象销毁的时候如何处理关联对象
-	所有的关联对象都是由 `AssociationsManager` 管理, 里面有一个静态 `AssociationsHashMap` 来存储所有的关联对象的, `runtime` 的销毁对象 `objc_destructInstance` 里面会判断这个对象有没有关联对象, 如果有, 会调用 `_object_remove_assocations` 做关联对象的清理方法
+	所有的关联对象都是由 `AssociationsManager` 管理, 里面有一个静态 `AssociationsHashMap` 来存储所有的关联对象的, `runtime` 的销毁对象函数 `objc_destructInstance` 里面会判断这个对象有没有关联对象, 如果有, 会调用 `_object_remove_assocations` 做关联对象的清理方法
 
 
 #### 6. `Category` 添加属性
@@ -193,56 +193,56 @@ static const char associatedKey
 下面以 UIView 的 backgroundColor 为例子, 其中涉及到了  RAC 相关的知识, 就不在这里介绍了
 	下面开始:
 
-		1. 创建 UIView 的类别  UIView+Theme 文件
-		2. 在 .h 文件中声明设置背景色的方法
+1. 创建 UIView 的类别  UIView+Theme 文件
+2. 在 .h 文件中声明设置背景色的方法
 
 ```
-	@param scheme 色系
-	- (void)setBackgroundSchemeNew:(NSString *)scheme;
+@param scheme 色系
+- (void)setBackgroundSchemeNew:(NSString *)scheme;
 ```
 
-		3.  在 .m 文件中声明静态变量
+3.  在 .m 文件中声明静态变量
 
 ```
-	static const char backgroundScheme;
+static const char backgroundScheme;
 ```
 
-		4. 实现方法
+4. 实现方法
 	
 ```objc
-	- (void)setBackgroundScheme:(NSString *)scheme{
-	    //去掉重复添加
-	    NSString *background = objc_getAssociatedObject(self, &backgroundScheme);
-	    if ([background isEqualToString:scheme]) {
-	        return;
-	    }
-	    
-	    objc_setAssociatedObject(self, &backgroundScheme, scheme, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-	    @weakify(self);
-	    //下面是我司用 RAC 实现监听皮肤改版的信号, 等皮肤改变了会触发这个信号
-	    [[[SignalCenter sharedInstance] themeStatusSignal] subscribeNext:^(id x) {
-	        @strongify(self);
-	        [self changeThemeBackground];
-	    }];
-	    [self changeThemeBackground];
-	}
-	//接受到换肤信号之后会执行这个方法
-	- (void)changeThemeBackground{
-	    NSString *background = objc_getAssociatedObject(self, &backgroundScheme);
-	    //ResourceManager 是我们存储颜色的单例, 暴露各种颜色的接口
-	    ResourceManager *manager = [ResourceManager sharedInstance];
-	    SEL seletor = NSSelectorFromString(background);
-	    if ([manager respondsToSelector:seletor]) {
-	        self.backgroundColor = [manager performSelector:seletor];
-	    }
-	}
+- (void)setBackgroundScheme:(NSString *)scheme{
+    //去掉重复添加
+    NSString *background = objc_getAssociatedObject(self, &backgroundScheme);
+    if ([background isEqualToString:scheme]) {
+        return;
+    }
+    
+    objc_setAssociatedObject(self, &backgroundScheme, scheme, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    @weakify(self);
+    //下面是我司用 RAC 实现监听皮肤改版的信号, 等皮肤改变了会触发这个信号;
+    [[[SignalCenter sharedInstance] themeStatusSignal] subscribeNext:^(id x) {
+        @strongify(self);
+        [self changeThemeBackground];
+    }];
+    [self changeThemeBackground];
+}
+//接受到换肤信号之后会执行这个方法
+- (void)changeThemeBackground{
+    NSString *background = objc_getAssociatedObject(self, &backgroundScheme);
+    //ResourceManager 是我们存储颜色的单例, 暴露各种颜色的接口;
+    ResourceManager *manager = [ResourceManager sharedInstance];
+    SEL seletor = NSSelectorFromString(background);
+    if ([manager respondsToSelector:seletor]) {
+        self.backgroundColor = [manager performSelector:seletor];
+    }
+}
 ```
 ## 补充
 ##### 实例变量和属性, 成员变量
 
 1. 属性就是我们正常声明的 `@property (nonatomic, strong) UIButton *btn`
 1. 实例变量 `_btn`
-1. 成员变量是定义在 `@interface XX {}` 中的变量, 如果变量的数据类型是第一个类, 则称这个变量为实例变量, 可以这么理解, 实例变量本质上就是成员变量, 只是实例是针对类而言, 实例是指类的声明
+1. 成员变量是定义在 `@interface XX {}` 中的变量, 如果变量的数据类型是一个类, 则称这个变量为实例变量, 可以这么理解, 实例变量本质上就是成员变量, 只是实例是针对类而言, 实例是指类的声明
 1. 实例变量 + 基本数据类型变量 = 成员变量
 
 
