@@ -212,6 +212,7 @@ static const char backgroundScheme;
 ```objc
 - (void)setBackgroundScheme:(NSString *)scheme{
     //去掉重复添加
+    
     NSString *background = objc_getAssociatedObject(self, &backgroundScheme);
     if ([background isEqualToString:scheme]) {
         return;
@@ -220,6 +221,7 @@ static const char backgroundScheme;
     objc_setAssociatedObject(self, &backgroundScheme, scheme, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     @weakify(self);
     //下面是我司用 RAC 实现监听皮肤改版的信号, 等皮肤改变了会触发这个信号;
+
     [[[SignalCenter sharedInstance] themeStatusSignal] subscribeNext:^(id x) {
         @strongify(self);
         [self changeThemeBackground];
@@ -227,9 +229,11 @@ static const char backgroundScheme;
     [self changeThemeBackground];
 }
 //接受到换肤信号之后会执行这个方法
+
 - (void)changeThemeBackground{
     NSString *background = objc_getAssociatedObject(self, &backgroundScheme);
     //ResourceManager 是我们存储颜色的单例, 暴露各种颜色的接口;
+
     ResourceManager *manager = [ResourceManager sharedInstance];
     SEL seletor = NSSelectorFromString(background);
     if ([manager respondsToSelector:seletor]) {
