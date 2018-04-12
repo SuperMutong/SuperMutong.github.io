@@ -167,6 +167,7 @@ ios 在64位的时候引入了`TaggedPointer`的机制, 如果对象使用了`Ta
 `extra_rc` 用于保存<kbd>额外</kbd>的自动引用计数的标志位, 下面是`isa`结构体中的结构, `isa`是在`objc_object`这个结构体, 在学习`Runtime`的时候学习过
 
 下面是`isa_t`结构体的结构:
+
 ![](https://img.draveness.me/2016-05-27-objc-rr-isa-struct.png-1000width)
 
 接下来我们会分三种情况对`rootRetain`进行分析
@@ -537,7 +538,7 @@ struct __AtAutoreleasePool {
 };
 ```
 
-这个结构的构造函数会调用`objc_autoreleasePoolPush()` 并返回一个`atautoreleasepoolobj`对象, 并其析构函数, 会将`atautoreleasepoolobj`对象作为`objc_autoreleasePoolPop()`的入参.
+这个结构的构造函数会调用`objc_autoreleasePoolPush()` 并返回一个`atautoreleasepoolobj`对象, 并且析构函数, 会将`atautoreleasepoolobj`对象作为`objc_autoreleasePoolPop()`的入参.
 
 其实`main.m`中的方法其实就是这样
 ```objc
@@ -988,7 +989,8 @@ void kill()
 
 ### autorelease
 
-理解了自动释放池, 说下`autorelease`, `autorelease`是一种支持引用计数的内存管理方式, 只要给对象发送一条` autorelease`消息, 会将对象放到一个自动释放池中, 当自动释放池被销毁时, 会对池子里的所有对象发送`release`操作, 如果当前引用计数为0, 就会调用当前对象的`dealloc`方法
+理解了自动释放池, 说下`autorelease`, `autorelease`是一种支持引用计数的内存管理方式, ~~只要给对象发送一条` autorelease`消息, 会将对象放到一个自动释放池中~~,一个对象添加`autorelease`后, 放在自动释放池中才会有效, 当自动释放池被销毁时, 会对池子里的所有对象发送`release`操作, 如果当前引用计数为0, 就会调用当前对象的`dealloc`方法
+
 
 #### autorelease 好处
 * 不用关心对象释放的时间
