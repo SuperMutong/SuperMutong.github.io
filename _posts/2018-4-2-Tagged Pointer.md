@@ -24,12 +24,13 @@ tags:
 
 所以一个普通的iOS程序, 如果没有Tagged Pointer 对象, 从32位机器迁移到64位机器后, 虽然逻辑没有任何变化, 但是NSNumber, NSDate一类的对象所占的内存会翻倍, 如下图
 
-![别人的图](https://res.infoq.com/articles/deep-understanding-of-tagged-pointer/zh/resources/0519060.jpg)
+![](https://ws3.sinaimg.cn/large/006tNc79ly1fqebh4ftvjj30mj0f2q3i.jpg)
 
 为了改进上面提到的内存占用和效率问题, 苹果提出了Tagged Pointer. 由于NSNumber, NSDate一类的变量本身的值需要占用的内存大小通常不需要8个字节, 拿整数来说, 四个字节所能表示的有符号证书可以达到20多亿(2^31=2147483648, 有一位作为符号位), 对于绝大数情况都是可以处理的
 
 所以我们可以将一个对象的指针拆为两部分, 一部分直接保存数据, 另一部分作为特殊标记, 表示这是一个特别的指针, 不指向任何一个地方. 所以, 引入了Tagged Pointer之后, 64位CPU下NSNumber的内存图变成了一下这样
-![](https://res.infoq.com/articles/deep-understanding-of-tagged-pointer/zh/resources/0519061.jpg)
+
+![](https://ws3.sinaimg.cn/large/006tNc79ly1fqebjgzdxvj30md0faaak.jpg)
 
 ### Tagged Pointer的特点
 
