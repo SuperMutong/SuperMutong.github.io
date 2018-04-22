@@ -93,7 +93,9 @@ ClassA.m
 }
 ```
 2. 对象销毁的时候如何处理关联对象
-	所有的关联对象都是由 `AssociationsManager` 管理, 里面有一个静态 `AssociationsHashMap` 来存储所有的关联对象的, `runtime` 的销毁对象函数 `objc_destructInstance` 里面会判断这个对象有没有关联对象, 如果有, 会调用 `_object_remove_assocations` 做关联对象的清理方法
+	所有的关联对象都是由 `AssociationsManager` 管理, ~~里面有一个静态 `AssociationsHashMap` 来存储所有的关联对象的,, `runtime` 的销毁对象函数 `objc_destructInstance` 里面会判断这个对象有没有关联对象, 如果有, 会调用 `_object_remove_assocations` 做关联对象的清理方法~~ 4.22更新, `AssociationsManager`维护这一个`AssociationsHashMap`哈希表的单例键值对映射, `AssocaationsHashMap`是一个无序的哈希表, 维护了一个对象地址到`ObjectAssociationMap`的映射, `ObjectAssociationMap`是一个`c++`中的`map`, 维护了从`key`到`ObjcAssocation`的映射, `objcAssocation`是一个`c++`的类, 表示一个具体的关联对象, 主要包括了两个实例变量, `_policy`表示关联策略, `_value`表示关联对象.
+
+    `runtime` 的销毁对象函数 `objc_destructInstance` 里面会判断这个对象有没有关联对象, 如果有, 会调用 `_object_remove_assocations` 做关联对象的清理方法
 
 
 #### 6. `Category` 添加属性
