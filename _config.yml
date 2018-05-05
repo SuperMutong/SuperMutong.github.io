@@ -61,8 +61,8 @@ gitalk:
   clientID: 8dca7ba26960d8b1c104                            #生成的clientID
   clientSecret: d61a7aabfe868a32a04db20ea25ff0af8f629fd9    #生成的clientSecret
   repo: SuperMutong.github.io    #仓库名称
-  owner: supermutong    #github用户名
-  admin: supermutong
+  owner: SuperMutong    #github用户名
+  admin: SuperMutong
   distractionFreeMode: true #是否启用类似FB的阴影遮罩
 
 
